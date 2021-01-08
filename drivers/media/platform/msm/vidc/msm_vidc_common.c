@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,9 +24,20 @@
 #include "msm_vidc_dcvs.h"
 #include "msm_vdec.h"
 
-#define IS_ALREADY_IN_STATE(__p, __d) (\
-	(__p >= __d)\
-)
+#define IS_ALREADY_IN_STATE(__p, __d) ({\
+	int __rc = (__p >= __d);\
+	__rc; \
+})
+
+#define SUM_ARRAY(__arr, __start, __end) ({\
+		int __index;\
+		typeof((__arr)[0]) __sum = 0;\
+		for (__index = (__start); __index <= (__end); __index++) {\
+			if (__index >= 0 && __index < ARRAY_SIZE(__arr))\
+				__sum += __arr[__index];\
+		} \
+		__sum;\
+})
 
 #define V4L2_EVENT_SEQ_CHANGED_SUFFICIENT \
 		V4L2_EVENT_MSM_VIDC_PORT_SETTINGS_CHANGED_SUFFICIENT
@@ -120,7 +131,7 @@ int msm_comm_g_ctrl_for_id(struct msm_vidc_inst *inst, int id)
 	};
 
 	rc = msm_comm_g_ctrl(inst, &ctrl);
-	return rc ? rc : ctrl.value;
+	return rc ?: ctrl.value;
 }
 
 static struct v4l2_ctrl **get_super_cluster(struct msm_vidc_inst *inst,
@@ -675,13 +686,11 @@ static void handle_sys_init_done(enum hal_command_response cmd, void *data)
 
 	/* This should come from sys_init_done */
 	core->resources.max_inst_count =
-		sys_init_msg->max_sessions_supported ?
-		sys_init_msg->max_sessions_supported :
+		sys_init_msg->max_sessions_supported ? :
 		MAX_SUPPORTED_INSTANCES;
 
 	core->resources.max_secure_inst_count =
-		core->resources.max_secure_inst_count ?
-		core->resources.max_secure_inst_count :
+		core->resources.max_secure_inst_count ? :
 		core->resources.max_inst_count;
 
 	if (core->id == MSM_VIDC_CORE_VENUS &&
@@ -705,11 +714,12 @@ static void handle_sys_init_done(enum hal_command_response cmd, void *data)
 
 static void put_inst_helper(struct kref *kref)
 {
-	struct msm_vidc_inst *inst = container_of(kref, struct msm_vidc_inst,
-			kref);
+	struct msm_vidc_inst *inst = container_of(kref,
+					struct msm_vidc_inst, kref);
 
 	msm_vidc_destroy(inst);
 }
+
 
 static void put_inst(struct msm_vidc_inst *inst)
 {
@@ -3849,17 +3859,17 @@ int msm_comm_qbuf(struct msm_vidc_inst *inst, struct vb2_buffer *vb)
 	 * Don't queue if:
 	 * 1) Hardware isn't ready (that's simple)
 	 */
-	defer = defer ? defer : (inst->state != MSM_VIDC_START_DONE);
+	defer = defer ?: inst->state != MSM_VIDC_START_DONE;
 
 	/*
 	 * 2) The client explicitly tells us not to because it wants this
 	 * buffer to be batched with future frames.  The batch size (on both
 	 * capabilities) is completely determined by the client.
 	 */
-	defer = defer ? defer : (vbuf && vbuf->flags & V4L2_MSM_BUF_FLAG_DEFER);
+	defer = defer ?: vbuf && vbuf->flags & V4L2_MSM_BUF_FLAG_DEFER;
 
 	/* 3) If we're in batch mode, we must have full batches of both types */
-	defer = defer ? defer:(batch_mode && (!output_count || !capture_count));
+	defer = defer ?: batch_mode && (!output_count || !capture_count);
 
 	if (defer) {
 		dprintk(VIDC_DBG, "Deferring queue of %pK\n", vb);

@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -117,7 +117,7 @@ static int ion_system_secure_heap_allocate(struct ion_heap *heap,
 						heap);
 
 	if (!ion_heap_is_system_secure_heap_type(secure_heap->heap.type) ||
-		!(is_cp_flag_present(flags) || (flags & ION_FLAG_SECURE))) {
+	    !(is_cp_flag_present(flags) || (flags & ION_FLAG_SECURE))) {
 		pr_info("%s: Incorrect heap type or incorrect flags\n",
 								__func__);
 		return -EINVAL;
