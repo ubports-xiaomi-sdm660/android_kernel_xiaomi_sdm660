@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2010 - 2017 Novatek, Inc.
- * Copyright (C) 2018 XiaoMi, Inc.
+ * Copyright (C) 2019 XiaoMi, Inc.
  *
  * $Revision: 14590 $
  * $Date: 2017-07-20 11:14:42 +0800 (周四, 20 七月 2017) $
@@ -25,7 +25,6 @@
 
 #include "nt36xxx.h"
 #include "nt36xxx_mp_ctrlram.h"
-#include "../lct_ctp_selftest.h"
 #if NVT_TOUCH_MP
 
 #define NORMAL_MODE 0x00
@@ -47,45 +46,45 @@
 		printk(fmt, ##args);	\
 } while (0)
 
-static uint8_t *RecordResult_Short;
-static uint8_t *RecordResult_Short_Diff;
-static uint8_t *RecordResult_Short_Base;
-static uint8_t *RecordResult_Open;
-static uint8_t *RecordResult_FWMutual;
-static uint8_t *RecordResult_FW_CC;
-static uint8_t *RecordResult_FW_CC_I;
-static uint8_t *RecordResult_FW_CC_Q;
-static uint8_t *RecordResult_FW_DiffMax;
-static uint8_t *RecordResult_FW_DiffMin;
+static uint8_t *RecordResult_Short = NULL;
+static uint8_t *RecordResult_Short_Diff = NULL;
+static uint8_t *RecordResult_Short_Base = NULL;
+static uint8_t *RecordResult_Open = NULL;
+static uint8_t *RecordResult_FWMutual = NULL;
+static uint8_t *RecordResult_FW_CC = NULL;
+static uint8_t *RecordResult_FW_CC_I = NULL;
+static uint8_t *RecordResult_FW_CC_Q = NULL;
+static uint8_t *RecordResult_FW_DiffMax = NULL;
+static uint8_t *RecordResult_FW_DiffMin = NULL;
 
-static int32_t TestResult_Short;
-static int32_t TestResult_Short_Diff;
-static int32_t TestResult_Short_Base;
-static int32_t TestResult_Open;
-static int32_t TestResult_FW_Rawdata;
-static int32_t TestResult_FWMutual;
-static int32_t TestResult_FW_CC;
-static int32_t TestResult_FW_CC_I;
-static int32_t TestResult_FW_CC_Q;
-static int32_t TestResult_Noise;
-static int32_t TestResult_FW_DiffMax;
-static int32_t TestResult_FW_DiffMin;
+static int32_t TestResult_Short = 0;
+static int32_t TestResult_Short_Diff = 0;
+static int32_t TestResult_Short_Base = 0;
+static int32_t TestResult_Open = 0;
+static int32_t TestResult_FW_Rawdata = 0;
+static int32_t TestResult_FWMutual = 0;
+static int32_t TestResult_FW_CC = 0;
+static int32_t TestResult_FW_CC_I = 0;
+static int32_t TestResult_FW_CC_Q = 0;
+static int32_t TestResult_Noise = 0;
+static int32_t TestResult_FW_DiffMax = 0;
+static int32_t TestResult_FW_DiffMin = 0;
 
-static int32_t *RawData_Short;
-static int32_t *RawData_Short_Diff;
-static int32_t *RawData_Short_Base;
-static int32_t *RawData_Open;
-static int32_t *RawData_Diff;
-static int32_t *RawData_Diff_Min;
-static int32_t *RawData_Diff_Max;
-static int32_t *RawData_FWMutual;
-static int32_t *RawData_FW_CC;
-static int32_t *RawData_FW_CC_I;
-static int32_t *RawData_FW_CC_Q;
+static int32_t *RawData_Short = NULL;
+static int32_t *RawData_Short_Diff = NULL;
+static int32_t *RawData_Short_Base = NULL;
+static int32_t *RawData_Open = NULL;
+static int32_t *RawData_Diff = NULL;
+static int32_t *RawData_Diff_Min = NULL;
+static int32_t *RawData_Diff_Max = NULL;
+static int32_t *RawData_FWMutual = NULL;
+static int32_t *RawData_FW_CC = NULL;
+static int32_t *RawData_FW_CC_I = NULL;
+static int32_t *RawData_FW_CC_Q = NULL;
 
-static struct proc_dir_entry *NVT_proc_selftest_entry;
-static struct proc_dir_entry *proc_selftest_result;
-static int8_t nvt_mp_test_result_printed;
+static struct proc_dir_entry *NVT_proc_selftest_entry = NULL;
+static struct proc_dir_entry *proc_selftest_result = NULL;
+static int8_t nvt_mp_test_result_printed = 0;
 
 extern void nvt_change_mode(uint8_t mode);
 extern uint8_t nvt_get_fw_pipe(void);
@@ -93,7 +92,7 @@ extern void nvt_read_mdata(uint32_t xdata_addr, uint32_t xdata_btn_addr);
 extern void nvt_get_mdata(int32_t *buf, uint8_t *m_x_num, uint8_t *m_y_num);
 void nvt_mp_parse_dt(struct device_node *root, const char *node_compatible);
 
-static int test_result;
+static int test_result = 0;
 
 /*******************************************************
 Description:
@@ -236,7 +235,7 @@ static void nvt_print_lmt_array(int32_t *array, int32_t x_ch, int32_t y_ch)
 #endif /* #if TOUCH_KEY_NUM > 0 */
 
 	for (j = 0; j < y_ch; j++) {
-		for (i = 0; i < x_ch; i++) {
+		for(i = 0; i < x_ch; i++) {
 			printk("%5d, ", array[j * x_ch + i]);
 		}
 		printk("\n");
@@ -356,7 +355,7 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 			sprintf(fbufp + iArrayIndex * 7 + y * 2, "%5d, ", rawdata[iArrayIndex]);
 		}
 		printk("\n");
-		sprintf(fbufp + (iArrayIndex + 1) * 7 + y * 2, "\r\n");
+		sprintf(fbufp + (iArrayIndex + 1) * 7 + y * 2,"\r\n");
 	}
 #if TOUCH_KEY_NUM > 0
 	keydata_output_offset = y_ch * x_ch * 7 + y_ch * 2;
@@ -379,7 +378,7 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 			kfree(fbufp);
 			fbufp = NULL;
 		}
-		return -EPERM;
+		return -1;
 	}
 
 #if TOUCH_KEY_NUM > 0
@@ -401,7 +400,7 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 			kfree(fbufp);
 			fbufp = NULL;
 		}
-		return -EPERM;
+		return -1;
 	}
 
 	set_fs(org_fs);
@@ -461,7 +460,7 @@ static int32_t nvt_polling_hand_shake_status(void)
 		CTP_I2C_READ(ts->client, I2C_FW_Address, buf, 6);
 		NVT_ERR("Read back 5 bytes from offset EVENT_MAP_HOST_CMD: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n", buf[1], buf[2], buf[3], buf[4], buf[5]);
 
-		return -EPERM;
+		return -1;
 	} else {
 		return 0;
 	}
@@ -790,7 +789,7 @@ static void nvt_enable_short_test(void)
 	CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 5);
 }
 
-static int32_t nvt_read_fw_open(int32_t *xdata, int test_flag)
+static int32_t nvt_read_fw_open(int32_t *xdata,int test_flag)
 {
 	uint32_t raw_pipe_addr = 0;
 	uint8_t *rawdata_buf = NULL;
@@ -1088,10 +1087,10 @@ static int32_t RawDataTest_Sub(int32_t rawdata[], uint8_t RecordResult[], uint8_
 
 			RecordResult[iArrayIndex] = 0x00;
 
-			if (rawdata[iArrayIndex] > Rawdata_Limit_Postive)
+			if(rawdata[iArrayIndex] > Rawdata_Limit_Postive)
 				RecordResult[iArrayIndex] |= 0x01;
 
-			if (rawdata[iArrayIndex] < Rawdata_Limit_Negative)
+			if(rawdata[iArrayIndex] < Rawdata_Limit_Negative)
 				RecordResult[iArrayIndex] |= 0x02;
 		}
 	}
@@ -1101,10 +1100,10 @@ static int32_t RawDataTest_Sub(int32_t rawdata[], uint8_t RecordResult[], uint8_
 
 		RecordResult[iArrayIndex] = 0x00;
 
-		if (rawdata[iArrayIndex] > Rawdata_Limit_Key_Postive)
+		if(rawdata[iArrayIndex] > Rawdata_Limit_Key_Postive)
 			RecordResult[iArrayIndex] |= 0x01;
 
-		if (rawdata[iArrayIndex] < Rawdata_Limit_Key_Negative)
+		if(rawdata[iArrayIndex] < Rawdata_Limit_Key_Negative)
 			RecordResult[iArrayIndex] |= 0x02;
 	}
 #endif /* #if TOUCH_KEY_NUM > 0 */
@@ -1129,7 +1128,7 @@ static int32_t RawDataTest_Sub(int32_t rawdata[], uint8_t RecordResult[], uint8_
 #endif /* #if TOUCH_KEY_NUM > 0 */
 
 	if (isPass == false) {
-		return -EPERM;
+		return -1;
 	} else {
 		return 0;
 	}
@@ -1158,10 +1157,10 @@ static int32_t RawDataTest_SinglePoint_Sub(int32_t rawdata[], uint8_t RecordResu
 
 			RecordResult[iArrayIndex] = 0x00;
 
-			if (rawdata[iArrayIndex] > Rawdata_Limit_Postive[iArrayIndex])
+			if(rawdata[iArrayIndex] > Rawdata_Limit_Postive[iArrayIndex])
 				RecordResult[iArrayIndex] |= 0x01;
 
-			if (rawdata[iArrayIndex] < Rawdata_Limit_Negative[iArrayIndex])
+			if(rawdata[iArrayIndex] < Rawdata_Limit_Negative[iArrayIndex])
 				RecordResult[iArrayIndex] |= 0x02;
 		}
 	}
@@ -1171,10 +1170,10 @@ static int32_t RawDataTest_SinglePoint_Sub(int32_t rawdata[], uint8_t RecordResu
 
 		RecordResult[iArrayIndex] = 0x00;
 
-		if (rawdata[iArrayIndex] > Rawdata_Limit_Postive[iArrayIndex])
+		if(rawdata[iArrayIndex] > Rawdata_Limit_Postive[iArrayIndex])
 			RecordResult[iArrayIndex] |= 0x01;
 
-		if (rawdata[iArrayIndex] < Rawdata_Limit_Negative[iArrayIndex])
+		if(rawdata[iArrayIndex] < Rawdata_Limit_Negative[iArrayIndex])
 			RecordResult[iArrayIndex] |= 0x02;
 	}
 #endif /* #if TOUCH_KEY_NUM > 0 */
@@ -1199,7 +1198,7 @@ static int32_t RawDataTest_SinglePoint_Sub(int32_t rawdata[], uint8_t RecordResu
 #endif /* #if TOUCH_KEY_NUM > 0 */
 
 	if (isPass == false) {
-		return -EPERM;
+		return -1;
 	} else {
 		return 0;
 	}
@@ -1412,24 +1411,24 @@ return:
 	Executive outcomes. cnt.
 *******************************************************/
 
-static ssize_t nvt_test_result_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+static ssize_t nvt_test_result_read(struct file *file,char __user *buf, size_t size,loff_t *ppos)
 {
 	int cnt = 0;
 	char *page = NULL;
-
+	
 	page = kzalloc(16, GFP_KERNEL);
-	NVT_LOG("test_result have %d err", test_result);
+	NVT_LOG("test_result have %d err",test_result);
 
-	if (test_result == 0)
+	if(test_result == 0)
 	{
-		cnt = sprintf(page, "PASS\n");
+		cnt = sprintf(page,"PASS\n");
 	}
 	else
 	{
-		cnt = sprintf(page, "FAIL\n");
+		cnt = sprintf(page,"FAIL\n");
 		test_result = 0;
 	}
-	cnt = simple_read_from_buffer(buf, size, ppos, page, cnt);
+	cnt = simple_read_from_buffer(buf,size,ppos,page,cnt);
 	kfree(page);
 	return cnt;
 }
@@ -1476,7 +1475,7 @@ static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 	}
 
 	/* Parsing criteria from dts */
-	if (of_property_read_bool(np, "novatek,mp-support-dt")) {
+	if(of_property_read_bool(np, "novatek,mp-support-dt")) {
 		/*
 		 * Parsing Criteria by Novatek PID
 		 * The string rule is "novatek-mp-criteria-<nvt_pid>"
@@ -1485,7 +1484,7 @@ static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 		 * Ex. nvt_pid = 500A
 		 *     mpcriteria = "novatek-mp-criteria-500A"
 		 */
-		snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-%04X", ts->nvt_pid);
+		snprintf(mpcriteria, sizeof(mpcriteria), "novatek-mp-criteria-%04X", ts->nvt_pid);
 
 		nvt_mp_parse_dt(np, mpcriteria);
 	} else {
@@ -1593,7 +1592,7 @@ static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 	}
 
 
-	if (nvt_read_fw_short(RawData_Short, 1) != 0) {
+	if (nvt_read_fw_short(RawData_Short,1) != 0) {
 		TestResult_Short = 1;
 		if (ts->carrier_system) {
 			TestResult_Short_Diff = 1;
@@ -1621,7 +1620,7 @@ static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 	}
 
 
-	if (nvt_read_fw_open(RawData_Open, 1) != 0) {
+	if (nvt_read_fw_open(RawData_Open,1) != 0) {
 		TestResult_Open = 1;
 	} else {
 
@@ -1639,251 +1638,6 @@ static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 	nvt_mp_test_result_printed = 0;
 
 	return seq_open(file, &nvt_selftest_seq_ops);
-}
-
-static int32_t tp_selftest(void)
-{
-	struct device_node *np = ts->client->dev.of_node;
-	uint8_t buf[8] = {0};
-	unsigned char mpcriteria[32] = {0};
-	TestResult_Short = 0;
-	TestResult_Short_Diff = 0;
-	TestResult_Short_Base = 0;
-	TestResult_Open = 0;
-	TestResult_FW_Rawdata = 0;
-	TestResult_FWMutual = 0;
-	TestResult_FW_CC = 0;
-	TestResult_FW_CC_I = 0;
-	TestResult_FW_CC_Q = 0;
-	TestResult_Noise = 0;
-	TestResult_FW_DiffMax = 0;
-	TestResult_FW_DiffMin = 0;
-
-	NVT_LOG("++\n");
-
-	if (mutex_lock_interruptible(&ts->lock)) {
-		return 0;
-	}
-
-#if NVT_TOUCH_ESD_PROTECT
-	nvt_esd_check_enable(false);
-#endif /* #if NVT_TOUCH_ESD_PROTECT */
-
-	if (nvt_get_fw_info()) {
-		mutex_unlock(&ts->lock);
-		NVT_ERR("get fw info failed!\n");
-		return 0;
-	}
-	/* Parsing criteria from dts */
-	if (of_property_read_bool(np, "novatek,mp-support-dt")) {
-		/*
-		 * Parsing Criteria by Novatek PID
-		 * The string rule is "novatek-mp-criteria-<nvt_pid>"
-		 * nvt_pid is 2 bytes (show hex).
-		 *
-		 * Ex. nvt_pid = 500A
-		 *     mpcriteria = "novatek-mp-criteria-500A"
-		 */
-		snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-%04X", ts->nvt_pid);
-
-		nvt_mp_parse_dt(np, mpcriteria);
-	} else {
-		NVT_LOG("Not found novatek,mp-support-dt, use default setting\n");
-
-		nvt_print_criteria();
-	}
-
-	if (nvt_switch_FreqHopEnDis(FREQ_HOP_DISABLE)) {
-		mutex_unlock(&ts->lock);
-		NVT_ERR("switch frequency hopping disable failed!\n");
-		return 0;
-	}
-
-	if (nvt_check_fw_reset_state(RESET_STATE_NORMAL_RUN)) {
-		mutex_unlock(&ts->lock);
-		NVT_ERR("check fw reset state failed!\n");
-		return 0;
-	}
-
-	msleep(100);
-
-
-	if (nvt_clear_fw_status()) {
-		mutex_unlock(&ts->lock);
-		NVT_ERR("clear fw status failed!\n");
-		return -EAGAIN;
-	}
-
-	nvt_change_mode(MP_MODE_CC);
-
-	if (nvt_check_fw_status()) {
-		mutex_unlock(&ts->lock);
-		NVT_ERR("check fw status failed!\n");
-		return -EAGAIN;
-	}
-
-
-	if (nvt_read_baseline(RawData_FWMutual) != 0) {
-		TestResult_FWMutual = 1;
-	} else {
-		TestResult_FWMutual = RawDataTest_SinglePoint_Sub(RawData_FWMutual, RecordResult_FWMutual, X_Channel, Y_Channel,
-												PS_Config_Lmt_FW_Rawdata_P, PS_Config_Lmt_FW_Rawdata_N);
-	}
-	if (nvt_read_CC(RawData_FW_CC) != 0) {
-		TestResult_FW_CC = 1;
-		if (ts->carrier_system) {
-			TestResult_FW_CC_I = 1;
-			TestResult_FW_CC_Q = 1;
-		}
-	} else {
-		if (ts->carrier_system) {
-			TestResult_FW_CC_I = RawDataTest_Sub(RawData_FW_CC_I, RecordResult_FW_CC_I, X_Channel, Y_Channel,
-												PS_Config_Lmt_FW_CC_I_P, PS_Config_Lmt_FW_CC_I_N,
-												PS_Config_Lmt_Key_FW_CC_I_P, PS_Config_Lmt_Key_FW_CC_I_N);
-			TestResult_FW_CC_Q = RawDataTest_Sub(RawData_FW_CC_Q, RecordResult_FW_CC_Q, X_Channel, Y_Channel,
-												PS_Config_Lmt_FW_CC_Q_P, PS_Config_Lmt_FW_CC_Q_N,
-												PS_Config_Lmt_Key_FW_CC_Q_P, PS_Config_Lmt_Key_FW_CC_Q_N);
-			if ((TestResult_FW_CC_I == -1) || (TestResult_FW_CC_Q == -1))
-				TestResult_FW_CC = -1;
-			else
-				TestResult_FW_CC = 0;
-		} else {
-			TestResult_FW_CC = RawDataTest_Sub(RawData_FW_CC, RecordResult_FW_CC, X_Channel, Y_Channel,
-												PS_Config_Lmt_FW_CC_P, PS_Config_Lmt_FW_CC_N,
-												PS_Config_Lmt_Key_FW_CC_P, PS_Config_Lmt_Key_FW_CC_N);
-		}
-	}
-
-	if ((TestResult_FWMutual == 1) || (TestResult_FW_CC == 1)) {
-		TestResult_FW_Rawdata = 1;
-	} else {
-		if ((TestResult_FWMutual == -1) || (TestResult_FW_CC == -1))
-			TestResult_FW_Rawdata = -1;
-		else
-			TestResult_FW_Rawdata = 0;
-	}
-
-
-	nvt_change_mode(NORMAL_MODE);
-
-
-	if (nvt_read_fw_noise(RawData_Diff) != 0) {
-		TestResult_Noise = 1;
-		TestResult_FW_DiffMax = 1;
-		TestResult_FW_DiffMin = 1;
-	} else {
-		TestResult_FW_DiffMax = RawDataTest_Sub(RawData_Diff_Max, RecordResult_FW_DiffMax, X_Channel, Y_Channel,
-											PS_Config_Lmt_FW_Diff_P, PS_Config_Lmt_FW_Diff_N,
-											PS_Config_Lmt_Key_FW_Diff_P, PS_Config_Lmt_Key_FW_Diff_N);
-
-
-		if (ts->carrier_system) {
-			TestResult_FW_DiffMin = 0;
-		} else {
-			TestResult_FW_DiffMin = RawDataTest_Sub(RawData_Diff_Min, RecordResult_FW_DiffMin, X_Channel, Y_Channel,
-												PS_Config_Lmt_FW_Diff_P, PS_Config_Lmt_FW_Diff_N,
-												PS_Config_Lmt_Key_FW_Diff_P, PS_Config_Lmt_Key_FW_Diff_N);
-		}
-
-		if ((TestResult_FW_DiffMax == -1) || (TestResult_FW_DiffMin == -1))
-			TestResult_Noise = -1;
-		else
-			TestResult_Noise = 0;
-	}
-
-
-	if (nvt_read_fw_short(RawData_Short, 1) != 0) {
-		TestResult_Short = 1;
-		if (ts->carrier_system) {
-			TestResult_Short_Diff = 1;
-			TestResult_Short_Base = 1;
-		}
-	} else {
-
-		if (ts->carrier_system) {
-			TestResult_Short_Diff = RawDataTest_Sub(RawData_Short_Diff, RecordResult_Short_Diff, X_Channel, Y_Channel,
-											PS_Config_Lmt_Short_Diff_P, PS_Config_Lmt_Short_Diff_N,
-											PS_Config_Lmt_Key_Short_Diff_P, PS_Config_Lmt_Key_Short_Diff_N);
-			TestResult_Short_Base = RawDataTest_Sub(RawData_Short_Base, RecordResult_Short_Base, X_Channel, Y_Channel,
-											PS_Config_Lmt_Short_Base_P, PS_Config_Lmt_Short_Base_N,
-											PS_Config_Lmt_Key_Short_Base_P, PS_Config_Lmt_Key_Short_Base_N);
-
-			if ((TestResult_Short_Diff == -1) || (TestResult_Short_Base == -1))
-				TestResult_Short = -1;
-			else
-				TestResult_Short = 0;
-		} else {
-			TestResult_Short = RawDataTest_Sub(RawData_Short, RecordResult_Short, X_Channel, Y_Channel,
-											PS_Config_Lmt_Short_Rawdata_P, PS_Config_Lmt_Short_Rawdata_N,
-											PS_Config_Lmt_Key_Short_Rawdata_P, PS_Config_Lmt_Key_Short_Rawdata_N);
-		}
-	}
-
-
-	if (nvt_read_fw_open(RawData_Open, 1) != 0) {
-		TestResult_Open = 1;
-	} else {
-
-		TestResult_Open = RawDataTest_SinglePoint_Sub(RawData_Open, RecordResult_Open, X_Channel, Y_Channel,
-											PS_Config_Lmt_Open_Rawdata_P, PS_Config_Lmt_Open_Rawdata_N);
-	}
-
-	if (TestResult_FW_Rawdata == 0) {
-		NVT_LOG("Rawdata test pass\n");
-	} else if (TestResult_FW_Rawdata == -1) {
-		NVT_LOG("Rawdata test fail\n");
-	} else {
-		NVT_LOG("Rawdata test invalid\n");
-	}
-
-	if (TestResult_Noise == 0) {
-		NVT_LOG("noise test pass\n");
-	} else if (TestResult_Noise == -1) {
-		NVT_LOG("noise test fail\n");
-	} else {
-		NVT_LOG("noise test invalid\n");
-	}
-
-	if (TestResult_Short == 0) {
-		NVT_LOG("short test pass\n");
-	} else if (TestResult_Short == -1) {
-		NVT_LOG("short test fail\n");
-	} else {
-		NVT_LOG("short test invalid\n");
-	}
-	if (TestResult_Open == 0) {
-		NVT_LOG("open test pass\n");
-	} else if (TestResult_Open == -1) {
-		NVT_LOG("open test fail\n");
-	} else {
-		NVT_LOG("open test invalid\n");
-	}
-
-	nvt_bootloader_reset();
-
-	mutex_unlock(&ts->lock);
-
-	buf[0] = 0x00;
-	buf[2] = 0x00;
-	if (CTP_I2C_READ(ts->client, I2C_HW_Address, buf, 2) < 0)
-	{
-		NVT_ERR("i2c test fail\n");
-	} else {
-		NVT_LOG("i2c test pass\n");
-	}
-
-	NVT_LOG("--\n");
-
-	nvt_mp_test_result_printed = 0;
-	if ((TestResult_FW_Rawdata > 0) || (TestResult_Noise > 0) || (TestResult_Short > 0) || (TestResult_Open > 0))
-	{
-		return 0;
-	}
-	if ((TestResult_FW_Rawdata == 0) && (TestResult_Noise == 0) && (TestResult_Short == 0) && (TestResult_Open == 0)) {
-		return 2;
-	} else {
-		return 1;
-	}
 }
 
 static const struct file_operations nvt_test_result_fops = {
@@ -2157,19 +1911,18 @@ return:
 *******************************************************/
 int32_t nvt_mp_proc_init(void)
 {
-	lct_ctp_selftest_int(tp_selftest);
-	proc_selftest_result = proc_create("nvt_test_result", 0444, NULL, &nvt_test_result_fops);
+	proc_selftest_result = proc_create("nvt_test_result",0444,NULL, &nvt_test_result_fops);
 	if (proc_selftest_result == NULL) {
 		NVT_ERR("create /proc/nvt_test_result Failed!\n");
 	}
 	NVT_proc_selftest_entry = proc_create("nvt_selftest", 0444, NULL, &nvt_selftest_fops);
 	if (NVT_proc_selftest_entry == NULL) {
 		NVT_ERR("create /proc/nvt_selftest Failed!\n");
-		return -EPERM;
+		return -1;
 	} else {
-		if (nvt_mp_buffer_init()) {
+		if(nvt_mp_buffer_init()) {
 			NVT_ERR("Allocate mp memory failed\n");
-			return -EPERM;
+			return -1;
 		}
 		else {
 			NVT_LOG("create /proc/nvt_selftest Succeeded!\n");
