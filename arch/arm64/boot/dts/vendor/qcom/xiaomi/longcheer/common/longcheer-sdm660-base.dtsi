@@ -33,6 +33,27 @@
 	qcom,qsee-reentrancy-support = <0>;
 };
 
+&thermal_zones {
+	ibat-high {
+		status = "disabled";
+	};
+	ibat-vhigh {
+		status = "disabled";
+	};
+	vbat_adc {
+		status = "disabled";
+	};
+	vbat_low {
+		status = "disabled";
+	};
+	vbat_too_low {
+		status = "disabled";
+        };
+        soc  {
+                status = "disabled";
+	};
+};
+
 /* sdm660-blsp.dtsi common diff */
 &spi_7 {
 	status = "okay";
