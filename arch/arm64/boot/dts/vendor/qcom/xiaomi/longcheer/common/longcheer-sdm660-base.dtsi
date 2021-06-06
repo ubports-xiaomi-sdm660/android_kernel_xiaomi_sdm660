@@ -134,4 +134,5 @@
 
 &i2c_1 {
 	qcom,disable-dma;
+	qcom,clk-freq-out = <1000000>;
 };
