@@ -7565,8 +7565,8 @@ static void csr_roam_process_join_res(struct mac_context *mac_ctx,
 			if (akm_type == eCSR_AUTH_TYPE_FT_SAE &&
 			    mdie_present) {
 				sme_debug("FT-SAE: Update MDID in PMK cache");
-				csr_update_pmk_cache_ft(mac_ctx,
-							session_id, NULL);
+				csr_update_pmk_cache_ft(mac_ctx, session_id,
+							NULL, NULL);
 			}
 
 			len = join_rsp->assocReqLength +
@@ -9208,12 +9208,17 @@ static void csr_roam_join_rsp_processor(struct mac_context *mac,
 	tSmeCmd *pCommand = NULL;
 	mac_handle_t mac_handle = MAC_HANDLE(mac);
 	struct csr_roam_session *session_ptr;
+	struct csr_roam_profile *profile = NULL;
 	struct csr_roam_connectedinfo *prev_connect_info;
 	tPmkidCacheInfo *pmksa_entry;
 	uint32_t len = 0, roamId = 0, reason_code = 0;
 	bool is_dis_pending;
 	bool use_same_bss = false;
 	bool retry_same_bss = false;
+	bool attempt_next_bss = true;
+	tPmkidCacheInfo pmk_cache;
+	uint8_t max_retry_count = 1;
+	enum csr_akm_type auth_type = eCSR_AUTH_TYPE_NONE;
 
 	if (!pSmeJoinRsp) {
 		sme_err("Sme Join Response is NULL");
@@ -9286,8 +9291,11 @@ static void csr_roam_join_rsp_processor(struct mac_context *mac,
 	/* The head of the active list is the request we sent
 	 * Try to get back the same profile and roam again
 	 */
-	if (pCommand)
+	if (pCommand) {
 		roamId = pCommand->u.roamCmd.roamId;
+		profile = &pCommand->u.roamCmd.roamProfile;
+		auth_type = profile->AuthType.authType[0];
+	}
 
 	reason_code = pSmeJoinRsp->protStatusCode;
 	session_ptr->joinFailStatusCode.reasonCode = reason_code;
@@ -9321,27 +9329,57 @@ static void csr_roam_join_rsp_processor(struct mac_context *mac,
 		qdf_mem_free(pmksa_entry);
 		retry_same_bss = true;
 	}
+
+	is_dis_pending = is_disconnect_pending(mac, session_ptr->sessionId);
+	/*
+	 * if userspace has issued disconnection or we have reached mac tries,
+	 * driver should not continue for next connection.
+	 */
+	if (is_dis_pending ||
+	    session_ptr->join_bssid_count >= CSR_MAX_BSSID_COUNT)
+		attempt_next_bss = false;
+
 	if (pSmeJoinRsp->messageType == eWNI_SME_JOIN_RSP &&
 	    pSmeJoinRsp->status_code == eSIR_SME_ASSOC_TIMEOUT_RESULT_CODE &&
-	    mlme_get_reconn_after_assoc_timeout_flag(mac->psoc,
-						     pSmeJoinRsp->sessionId))
+	    (mlme_get_reconn_after_assoc_timeout_flag(mac->psoc,
+						     pSmeJoinRsp->sessionId) ||
+	    (auth_type == eCSR_AUTH_TYPE_SAE ||
+	    auth_type == eCSR_AUTH_TYPE_FT_SAE))) {
 		retry_same_bss = true;
+		if (auth_type == eCSR_AUTH_TYPE_SAE ||
+		    auth_type == eCSR_AUTH_TYPE_FT_SAE)
+			wlan_mlme_get_sae_assoc_retry_count(mac->psoc,
+							    &max_retry_count);
+		}
 
-	if (retry_same_bss && pCommand && pCommand->u.roamCmd.pRoamBssEntry) {
+	if (attempt_next_bss && retry_same_bss &&
+	    pCommand && pCommand->u.roamCmd.pRoamBssEntry) {
 		struct tag_csrscan_result *scan_result;
 
 		scan_result =
 			GET_BASE_ADDR(pCommand->u.roamCmd.pRoamBssEntry,
 				      struct tag_csrscan_result, Link);
 		/* Retry with same BSSID without PMKID */
-		if (!scan_result->retry_count) {
-			sme_info("Retry once with same BSSID, status %d reason %d",
-				 pSmeJoinRsp->status_code, reason_code);
-			scan_result->retry_count = 1;
+		if (scan_result->retry_count < max_retry_count) {
+			sme_info("Retry once with same BSSID, status %d reason %d auth_type %d retry count %d max count %d",
+				 pSmeJoinRsp->status_code, reason_code,
+				 auth_type, scan_result->retry_count,
+				 max_retry_count);
+			scan_result->retry_count++;
 			use_same_bss = true;
 		}
 	}
 
+	/*
+	 * If connection fails with Single PMK bssid, clear this pmk
+	 * entry, Flush in case if we are not trying again with same AP
+	 */
+	qdf_mem_copy(&pmk_cache.BSSID.bytes,
+		     &pCommand->u.roamCmd.pLastRoamBss->bssId,
+		     sizeof(pmk_cache.BSSID.bytes));
+	if (!use_same_bss && pCommand && pCommand->u.roamCmd.pLastRoamBss)
+		csr_clear_sae_single_pmk(mac, pSmeJoinRsp->sessionId,
+					 &pmk_cache);
 	/* If Join fails while Handoff is in progress, indicate
 	 * disassociated event to supplicant to reconnect
 	 */
@@ -9356,13 +9394,7 @@ static void csr_roam_join_rsp_processor(struct mac_context *mac,
 						   QDF_STATUS_E_FAILURE);
 	}
 
-	/*
-	 * if userspace has issued disconnection, driver should not continue
-	 * connecting
-	 */
-	is_dis_pending = is_disconnect_pending(mac, session_ptr->sessionId);
-	if (pCommand && !is_dis_pending &&
-	    session_ptr->join_bssid_count < CSR_MAX_BSSID_COUNT) {
+	if (pCommand && attempt_next_bss) {
 		csr_roam(mac, pCommand, use_same_bss);
 		return;
 	}
@@ -15214,6 +15246,8 @@ static void csr_update_pmk_cache(struct csr_roam_session *session,
 	}
 
 	session->NumPmkidCache++;
+	sme_debug("PMKSA entry added at index = %d, cache count = %d",
+		  cache_idx, session->NumPmkidCache);
 	if (session->NumPmkidCache > CSR_MAX_PMKID_ALLOWED) {
 		sme_debug("setting num pmkid cache to %d",
 			CSR_MAX_PMKID_ALLOWED);
@@ -15228,8 +15262,10 @@ csr_roam_set_pmkid_cache(struct mac_context *mac, uint32_t sessionId,
 {
 	struct csr_roam_session *pSession = CSR_GET_SESSION(mac, sessionId);
 	uint32_t i = 0;
-	tPmkidCacheInfo *pmksa;
+	uint32_t pmkid_index;
+	tPmkidCacheInfo *pmksa, *pmkid_cache;
 	enum csr_akm_type akm_type;
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 
 	if (!pSession) {
 		sme_err("session %d not found", sessionId);
@@ -15255,12 +15291,33 @@ csr_roam_set_pmkid_cache(struct mac_context *mac, uint32_t sessionId,
 		return QDF_STATUS_SUCCESS;
 	}
 
+	pmkid_cache = qdf_mem_malloc(sizeof(*pmkid_cache));
+	if (!pmkid_cache)
+		return QDF_STATUS_E_NOMEM;
+
 	for (i = 0; i < numItems; i++) {
 		pmksa = &pPMKIDCache[i];
 
+		if (!pmksa->pmk_len || pmksa->pmk_len > CSR_RSN_MAX_PMK_LEN) {
+			sme_err("Invalid PMK length");
+			status = QDF_STATUS_E_FAILURE;
+			goto error;
+		}
+		qdf_copy_macaddr(&pmkid_cache->BSSID, &pmksa->BSSID);
+		sme_debug("Trying to find PMKID for " QDF_MAC_ADDR_STR,
+			  QDF_MAC_ADDR_ARRAY(pmkid_cache->BSSID.bytes));
+		if (csr_lookup_pmkid_using_bssid(mac, pSession, pmkid_cache,
+						 &pmkid_index) &&
+		    (!qdf_mem_cmp(pmkid_cache->pmk,
+				  pmksa->pmk, pmksa->pmk_len))) {
+			sme_debug("PMKSA entry found with same PMK at index %d",
+				  pmkid_index);
+			status = QDF_STATUS_E_EXISTS;
+			goto error;
+		}
+
 		/* Delete the entry if present */
-		csr_roam_del_pmkid_from_cache(mac, sessionId,
-				pmksa, false);
+		csr_roam_del_pmkid_from_cache(mac, sessionId, pmksa, false);
 		/* Update new entry */
 		csr_update_pmk_cache(pSession, pmksa);
 
@@ -15272,11 +15329,35 @@ csr_roam_set_pmkid_cache(struct mac_context *mac, uint32_t sessionId,
 		    pSession->connectedProfile.mdid.mdie_present) {
 			sme_debug("Auth type is %d update the MDID in cache",
 				  akm_type);
-			csr_update_pmk_cache_ft(mac,
-						sessionId, pmksa->cache_id);
+			csr_update_pmk_cache_ft(mac, sessionId, pmksa, NULL);
+			status = QDF_STATUS_SUCCESS;
+		} else {
+			tCsrScanResultInfo *scan_res;
+
+			scan_res = qdf_mem_malloc(sizeof(tCsrScanResultInfo));
+			if (!scan_res) {
+				status = QDF_STATUS_E_NOMEM;
+				goto error;
+			}
+
+			status = csr_get_scan_res_using_bssid(mac,
+							      &pmksa->BSSID,
+							      scan_res);
+			if (QDF_IS_STATUS_SUCCESS(status) &&
+			    scan_res->BssDescriptor.mdiePresent) {
+				sme_debug("Update MDID in cache from scan_res");
+				csr_update_pmk_cache_ft(mac, sessionId,
+							pmksa, scan_res);
+				status = QDF_STATUS_SUCCESS;
+			}
+			qdf_mem_free(scan_res);
+			scan_res = NULL;
 		}
 	}
-	return QDF_STATUS_SUCCESS;
+error:
+	qdf_mem_zero(pmkid_cache, sizeof(*pmkid_cache));
+	qdf_mem_free(pmkid_cache);
+	return status;
 }
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
@@ -15338,13 +15419,15 @@ void csr_clear_sae_single_pmk(struct mac_context *mac,
 }
 #endif
 
-void csr_update_pmk_cache_ft(struct mac_context *mac,
-			     uint32_t vdev_id, uint8_t *cache_id)
+void csr_update_pmk_cache_ft(struct mac_context *mac, uint32_t vdev_id,
+			     tPmkidCacheInfo *pmksa,
+			     tCsrScanResultInfo *scan_res)
 {
 	struct csr_roam_session *session = CSR_GET_SESSION(mac, vdev_id);
 	tPmkidCacheInfo *cached_pmksa;
+	struct qdf_mac_addr bssid;
+	uint16_t mdid = 0;
 	uint16_t mobility_domain;
-	uint16_t session_mdid;
 	uint8_t mdie_present;
 	uint8_t i;
 
@@ -15353,7 +15436,15 @@ void csr_update_pmk_cache_ft(struct mac_context *mac,
 		return;
 	}
 
-	session_mdid = session->connectedProfile.mdid.mobility_domain;
+	if (session->connectedProfile.mdid.mdie_present) {
+		mdid = session->connectedProfile.mdid.mobility_domain;
+		qdf_copy_macaddr(&bssid, &session->connectedProfile.bssid);
+	} else if (scan_res && scan_res->BssDescriptor.mdiePresent) {
+		mdid = (scan_res->BssDescriptor.mdie[0] |
+			(scan_res->BssDescriptor.mdie[1] << 8));
+		qdf_copy_macaddr(&bssid, &pmksa->BSSID);
+	}
+
 	for (i = 0; i < session->NumPmkidCache; i++) {
 		cached_pmksa = &session->PmkidCacheInfo[i];
 		mdie_present = cached_pmksa->mdid.mdie_present;
@@ -15363,22 +15454,19 @@ void csr_update_pmk_cache_ft(struct mac_context *mac,
 		 * and Delete the other PMKSA cache entries that has
 		 * the same MDID
 		 */
-		if (qdf_is_macaddr_equal(&cached_pmksa->BSSID,
-					 &session->connectedProfile.bssid)) {
-			sme_debug("PMK cached entry found, updating the MDID");
+		if (qdf_is_macaddr_equal(&cached_pmksa->BSSID, &bssid)) {
+			sme_debug("BSSID matched, updating MDID in PMK cache");
 			cached_pmksa->mdid.mdie_present = 1;
-			cached_pmksa->mdid.mobility_domain = session_mdid;
+			cached_pmksa->mdid.mobility_domain = mdid;
 		} else if (cached_pmksa->ssid_len &&
 			   (!qdf_mem_cmp(cached_pmksa->ssid,
-					 session->connectedProfile.SSID.ssId,
-					 session->
-					 connectedProfile.SSID.length)) &&
+					 pmksa->ssid, pmksa->ssid_len)) &&
 			   (!qdf_mem_cmp(cached_pmksa->cache_id,
-					 cache_id, CACHE_ID_LEN))) {
+					 pmksa->cache_id, CACHE_ID_LEN))) {
 			sme_debug("PMK cached entry found, updating the MDID");
 			cached_pmksa->mdid.mdie_present = 1;
-			cached_pmksa->mdid.mobility_domain = session_mdid;
-		} else if (mdie_present && (mobility_domain == session_mdid)) {
+			cached_pmksa->mdid.mobility_domain = mdid;
+		} else if (mdie_present && (mobility_domain == mdid)) {
 			sme_debug("MDID has matched, Delete the PMKSA entry");
 			/* Free the matched mobility domain entry from cache */
 			csr_roam_del_pmk_cache_entry(session, cached_pmksa, i);
