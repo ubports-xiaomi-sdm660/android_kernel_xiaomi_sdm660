@@ -397,7 +397,7 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 				0,
 				0,
 				0);
-	ret += ___update_load_sum(rq->clock, &rq->avg_irq,
+	ret |= ___update_load_sum(rq->clock, &rq->avg_irq,
 				1,
 				1,
 				1);
