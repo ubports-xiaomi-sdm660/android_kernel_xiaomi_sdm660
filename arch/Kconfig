@@ -1021,6 +1021,7 @@ config HAVE_ARCH_PREL32_RELOCATIONS
 	  architectures, and don't require runtime relocation on relocatable
 	  kernels.
 
+
 config PANIC_ON_REFCOUNT_ERROR
 	bool "Kernel panic on refcount error detection"
 	depends on REFCOUNT_FULL
