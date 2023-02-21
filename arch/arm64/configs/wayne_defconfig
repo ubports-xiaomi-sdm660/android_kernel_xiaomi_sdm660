@@ -961,3 +961,5 @@ CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder,anbox-binder,anbox-hwbi
 # Wireguard
 
 CONFIG_WIREGUARD=y
+
+CONFIG_BINFMT_MISC=y
